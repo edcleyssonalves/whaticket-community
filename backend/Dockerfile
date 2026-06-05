@@ -1,4 +1,4 @@
-FROM node:14 as build-deps
+FROM node:20 as build-deps
 
 RUN apt-get update && apt-get install -y wget
 
@@ -35,6 +35,7 @@ ENV CHROME_BIN=google-chrome-stable
 EXPOSE 3000
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD dockerize -wait tcp://${DB_HOST}:3306 \
+CMD dockerize -wait tcp://${DB_HOST}:3306 -timeout 60s \
   && npx sequelize db:migrate \
+  && npx sequelize db:seed:all \
   && node dist/server.js

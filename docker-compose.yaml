@@ -1,4 +1,4 @@
-version: '3'
+
 
 networks:
   whaticket:
@@ -11,6 +11,7 @@ services:
       dockerfile: ./Dockerfile
     environment:
       - DB_HOST=mysql
+      - DB_DIALECT=${DB_DIALECT:-mysql}
       - DB_USER=root
       - DB_PASS=${MYSQL_ROOT_PASSWORD:-strongpassword}
       - DB_NAME=${MYSQL_DATABASE:-whaticket}
@@ -19,12 +20,15 @@ services:
       - BACKEND_URL=${BACKEND_URL:-http://localhost}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - PROXY_PORT=${PROXY_PORT:-8080}
+      - WHATSAPP_PROVIDER=${WHATSAPP_PROVIDER:-wwebjs}
       - CHROME_ARGS=--no-sandbox --disable-setuid-sandbox
     ports:
       - ${BACKEND_PORT:-8080}:3000
     volumes:
       - ./backend/public/:/usr/src/app/public/
       - ./backend/.wwebjs_auth/:/usr/src/app/.wwebjs_auth/
+    depends_on:
+      - mysql
     networks:
       - whaticket
 
@@ -37,12 +41,14 @@ services:
       dockerfile: ./Dockerfile
     environment:
       - URL_BACKEND=backend:3000
-      - REACT_APP_BACKEND_URL=${BACKEND_URL:-http://localhost}:${PROXY_PORT:-8080}/
+      - VITE_BACKEND_URL=${BACKEND_URL:-http://localhost}:${BACKEND_PORT:-8080}
       - FRONTEND_SERVER_NAME=${FRONTEND_SERVER_NAME}
       - BACKEND_SERVER_NAME=${BACKEND_SERVER_NAME}
     volumes:
       - ./ssl/certs/:/etc/nginx/ssl/
       - ./ssl/www/:/var/www/letsencrypt/
+    depends_on:
+      - backend
     networks:
       - whaticket
 
