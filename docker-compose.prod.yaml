@@ -1,0 +1,80 @@
+# Stack de PRODUÇÃO.
+# Uso:
+#   cp .env.production.example .env   # e preencha os valores
+#   docker compose -f docker-compose.prod.yaml up -d --build
+#
+# Diferenças para o docker-compose.yaml (dev):
+#   - restart: unless-stopped em todos os serviços
+#   - MySQL e backend NÃO publicam portas no host (só rede interna)
+#   - acesso externo só pelo nginx do frontend (80/443), que faz proxy do backend
+#   - segredos obrigatórios (sem defaults inseguros): o "up" falha se faltarem
+#   - usuário de banco dedicado (não usa root)
+
+networks:
+  whaticket:
+
+services:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ./Dockerfile
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=mysql
+      - DB_DIALECT=${DB_DIALECT:-mysql}
+      - DB_USER=${DB_USER:?defina DB_USER no .env}
+      - DB_PASS=${DB_PASS:?defina DB_PASS no .env}
+      - DB_NAME=${MYSQL_DATABASE:-whaticket}
+      - JWT_SECRET=${JWT_SECRET:?defina JWT_SECRET no .env (openssl rand -hex 32)}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:?defina JWT_REFRESH_SECRET no .env (openssl rand -hex 32)}
+      - BACKEND_URL=${BACKEND_URL:?defina BACKEND_URL no .env (ex. https://api.seudominio.com)}
+      - FRONTEND_URL=${FRONTEND_URL:?defina FRONTEND_URL no .env (ex. https://app.seudominio.com)}
+      - PROXY_PORT=${PROXY_PORT:-443}
+      - WHATSAPP_PROVIDER=${WHATSAPP_PROVIDER:-wwebjs}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - CHROME_ARGS=--no-sandbox --disable-setuid-sandbox
+    volumes:
+      - ./backend/public/:/usr/src/app/public/
+      - ./backend/.wwebjs_auth/:/usr/src/app/.wwebjs_auth/
+    depends_on:
+      - mysql
+    networks:
+      - whaticket
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ./Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - URL_BACKEND=backend:3000
+      - VITE_BACKEND_URL=${BACKEND_URL:?defina BACKEND_URL no .env}
+      - FRONTEND_SERVER_NAME=${FRONTEND_SERVER_NAME:?defina FRONTEND_SERVER_NAME no .env}
+      - BACKEND_SERVER_NAME=${BACKEND_SERVER_NAME:?defina BACKEND_SERVER_NAME no .env}
+    volumes:
+      - ./ssl/certs/:/etc/nginx/ssl/
+      - ./ssl/www/:/var/www/letsencrypt/
+    depends_on:
+      - backend
+    networks:
+      - whaticket
+
+  mysql:
+    image: ${MYSQL_ENGINE:-mariadb}:${MYSQL_VERSION:-10.6}
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_bin
+    volumes:
+      - ./.docker/data/:/var/lib/mysql
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-whaticket}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?defina MYSQL_ROOT_PASSWORD no .env}
+      - MYSQL_USER=${DB_USER:?defina DB_USER no .env}
+      - MYSQL_PASSWORD=${DB_PASS:?defina DB_PASS no .env}
+      - TZ=${TZ:-America/Fortaleza}
+    networks:
+      - whaticket
